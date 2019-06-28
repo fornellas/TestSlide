@@ -447,8 +447,29 @@ def strict_mock(context):
                                     target is self.context_manager_strict_mock
                                 )
 
-            @context.shared_context
-            def instance_attributes(context):
+            @context.sub_context
+            def mock_instance_after_a_class_as_template(context):
+                @context.before
+                def before(self):
+                    self.strict_mock = StrictMock(
+                        Template, runtime_attrs=[self.runtime_attr]
+                    )
+                    self.strict_mock_rgx = (
+                        "<StrictMock 0x{:02X} template={} ".format(
+                            id(self.strict_mock),
+                            "{}.Template".format(Template.__module__),
+                        )
+                        + re.escape(self.caller_filename)
+                        + ":\d+>"
+                    )
+                    self.context_manager_strict_mock = StrictMock(
+                        ContextManagerTemplate
+                    )
+
+                    def mock_function(message):
+                        return "mock: {}".format(message)
+
+                    self.mock_function = mock_function
 
                 context.nest_context("non callable attributes")
 
@@ -478,31 +499,6 @@ def strict_mock(context):
 
                         context.merge_context("callable attributes")
 
-            @context.sub_context
-            def mock_instance_after_a_class_as_template(context):
-                @context.before
-                def before(self):
-                    self.strict_mock = StrictMock(
-                        Template, runtime_attrs=[self.runtime_attr]
-                    )
-                    self.strict_mock_rgx = (
-                        "<StrictMock 0x{:02X} template={} ".format(
-                            id(self.strict_mock),
-                            "{}.Template".format(Template.__module__),
-                        )
-                        + re.escape(self.caller_filename)
-                        + ":\d+>"
-                    )
-                    self.context_manager_strict_mock = StrictMock(
-                        ContextManagerTemplate
-                    )
-
-                    def mock_function(message):
-                        return "mock: {}".format(message)
-
-                    self.mock_function = mock_function
-
-                context.merge_context("instance attributes")
 
                 @context.example
                 def works_with_mock_callable(self):
@@ -514,10 +510,6 @@ def strict_mock(context):
                     strict_mock2 = StrictMock(Template)
                     strict_mock2.instance_method = lambda *args, **kwargs: None
 
-            # @context.xsub_context
-            # def mock_instance_after_any_object_as_template(context):
-            #     context.merge_context('instance attributes')
-            #
             # @context.xsub_context
             # def mock_class_after_a_class_as_template(context):
             #     context.nest_context('non callable attributes')
