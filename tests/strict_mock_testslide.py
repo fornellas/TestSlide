@@ -55,6 +55,9 @@ class Template(TemplateParent):
     def class_method(cls, message):
         return "class_method: {}".format(message)
 
+    def __len__(self):
+        return 0
+
     if sys.version_info[0] >= 3:
 
         @extra_arg
@@ -78,6 +81,10 @@ class ContextManagerTemplate(Template):
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
+
+
+class NoLen(object):
+    pass
 
 
 @context("StrictMock")  # noqa: C901
@@ -524,6 +531,38 @@ def strict_mock(context):
                                 context.merge_context(
                                     "callable attributes", wrap_test=False
                                 )
+
+                            @context.xsub_context("__bool__")
+                            def magic_bool(context):
+                                @context.sub_context("template without __len__")
+                                def template_without_len(context):
+                                    @context.memoize
+                                    def strict_mock(self):
+                                        return StrictMock(template=NoLen)
+
+                                    @context.example
+                                    def it_is_True(self):
+                                        print(self.strict_mock)
+                                        self.assertTrue(bool(self.strict_mock))
+
+                                @context.sub_context("template with __len__")
+                                def template_with_len(context):
+                                    @context.example
+                                    def it_raises(self):
+                                        with self.assertRaises(UndefinedBehavior):
+                                            bool(self.strict_mock)
+
+                                    @context.sub_context("with __len__ defined")
+                                    def with_len_defined(context):
+                                        @context.before
+                                        def before(self):
+                                            setattr(
+                                                self.strict_mock, "__len__", lambda: 0
+                                            )
+
+                                        @context.example
+                                        def it_respects_the_mock(self):
+                                            self.assertFalse(bool(self.strict_mock))
 
                     @context.sub_context
                     def static_methods(context):
