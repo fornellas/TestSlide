@@ -278,7 +278,7 @@ def strict_mock(context):
                     self.assertEqual(getattr(self.strict_mock, "slot_attribute"), value)
 
             @context.shared_context
-            def callable_attributes(context):
+            def callable_attributes(context, wrap_test=True):
                 @context.sub_context
                 def failures(context):
                     @context.example
@@ -358,18 +358,20 @@ def strict_mock(context):
                                         "message", "extra"
                                     )
 
-                            @context.example
-                            def works_with_wraps(self):
-                                test_method_name = "{}_extra".format(
-                                    self.test_method_name
-                                )
-                                setattr(
-                                    self.strict_mock,
-                                    test_method_name,
-                                    lambda message: "mock: {}".format(message),
-                                )
-                                method = getattr(self.strict_mock, test_method_name)
-                                self.assertEqual(method("hello"), "mock: hello")
+                            if wrap_test:
+
+                                @context.example
+                                def works_with_wraps(self):
+                                    test_method_name = "{}_extra".format(
+                                        self.test_method_name
+                                    )
+                                    setattr(
+                                        self.strict_mock,
+                                        test_method_name,
+                                        lambda message: "mock: {}".format(message),
+                                    )
+                                    method = getattr(self.strict_mock, test_method_name)
+                                    self.assertEqual(method("hello"), "mock: hello")
 
                 @context.sub_context
                 def success(context):
@@ -384,9 +386,9 @@ def strict_mock(context):
                         def after(self):
                             self.assertEqual(
                                 getattr(self.strict_mock, self.test_method_name)(
-                                    "hello"
+                                    *self.args
                                 ),
-                                "mock: hello",
+                                self.response,
                             )
 
                         @context.example
@@ -399,22 +401,27 @@ def strict_mock(context):
 
                         @context.example
                         def can_mock_with_lambda(self):
-                            setattr(
-                                self.strict_mock,
-                                self.test_method_name,
-                                lambda message: "mock: {}".format(message),
-                            )
+                            if self.args:
+                                lbd = lambda message: self.response
+                            else:
+                                lbd = lambda: self.response
+                            setattr(self.strict_mock, self.test_method_name, lbd)
 
                         @context.example
                         def can_mock_with_instancemethod(self):
                             class SomeClass(object):
-                                def mock_method(self, message):
-                                    return "mock: {}".format(message)
+                                def mock_method_args(_self, message):
+                                    return self.response
 
+                                def mock_method_no_args(_self):
+                                    return self.response
+
+                            if self.args:
+                                instance_method = SomeClass().mock_method_args
+                            else:
+                                instance_method = SomeClass().mock_method_no_args
                             setattr(
-                                self.strict_mock,
-                                self.test_method_name,
-                                SomeClass().mock_method,
+                                self.strict_mock, self.test_method_name, instance_method
                             )
 
                         @context.example
@@ -475,6 +482,9 @@ def strict_mock(context):
 
                 @context.sub_context
                 def callable_attributes(context):
+                    context.memoize("args", lambda self: ("hello",))
+                    context.memoize("response", lambda self: "mock: hello")
+
                     @context.example
                     def works_with_mock_callable(self):
                         """
@@ -489,11 +499,32 @@ def strict_mock(context):
 
                     @context.sub_context
                     def instance_methods(context):
-                        @context.before
-                        def before(self):
-                            self.test_method_name = "instance_method"
+                        @context.sub_context
+                        def regular(context):
+                            @context.before
+                            def before(self):
+                                self.test_method_name = "instance_method"
 
-                        context.merge_context("callable attributes")
+                            context.merge_context("callable attributes")
+
+                        @context.sub_context
+                        def magic_methods(context):
+                            @context.sub_context
+                            def generic(context):
+                                context.memoize("args", lambda self: tuple())
+
+                                @context.before
+                                def before(self):
+                                    self.test_method_name = "__str__"
+
+                                    def mock_function():
+                                        return "mock: hello"
+
+                                    self.mock_function = mock_function
+
+                                context.merge_context(
+                                    "callable attributes", wrap_test=False
+                                )
 
                     @context.sub_context
                     def static_methods(context):
