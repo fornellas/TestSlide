@@ -449,18 +449,20 @@ def strict_mock(context):
                     def when_template_has_context_manager_methods(context):
                         @context.example
                         def context_management_mocked_by_default(self):
-                            with self.context_manager_strict_mock as target:
-                                self.assertTrue(
-                                    target is self.context_manager_strict_mock
-                                )
+                            context_manager_strict_mock = StrictMock(
+                                ContextManagerTemplate
+                            )
+                            with context_manager_strict_mock as target:
+                                self.assertTrue(target is context_manager_strict_mock)
 
             @context.sub_context
             def mock_instance_after_a_class_as_template(context):
+                @context.memoize
+                def strict_mock(self):
+                    return StrictMock(Template, runtime_attrs=[self.runtime_attr])
+
                 @context.before
                 def before(self):
-                    self.strict_mock = StrictMock(
-                        Template, runtime_attrs=[self.runtime_attr]
-                    )
                     self.strict_mock_rgx = (
                         "<StrictMock 0x{:02X} template={} ".format(
                             id(self.strict_mock),
@@ -468,9 +470,6 @@ def strict_mock(context):
                         )
                         + re.escape(self.caller_filename)
                         + ":\d+>"
-                    )
-                    self.context_manager_strict_mock = StrictMock(
-                        ContextManagerTemplate
                     )
 
                     def mock_function(message):
